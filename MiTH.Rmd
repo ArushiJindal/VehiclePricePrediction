@@ -1,0 +1,725 @@
+---
+title: "Car Price Data"
+author: "Arushi"
+date: "27 October 2017"
+output: html_document
+---
+
+```{r}
+rm(list=ls(all=TRUE))
+
+# Loading the required libraries
+
+library(caret)
+#library(dummies)
+library(DMwR)
+library(infotheo)
+#library(caretEnsemble)
+library(xgboost)
+library(ggplot2)
+library(plotly)
+library(gbm)
+library(data.table) #To be able to change multiple columns in one go
+library(mlr) #for machine learning
+library(rpart) #Decision Trees
+library(ada)
+library(randomForest)
+library(e1071)
+
+#library(lubridate) #for handling dates
+#library(car) ## for VIF
+```
+
+
+# Exploratory Data Analysis
+
+## Reading in Data
+
+```{r}
+setwd("D:/INSOFE/Module 3 - ML/MITH")
+
+train = read.csv("train.csv",header=TRUE,na.strings = c(""," ","?","NA",NA),stringsAsFactors = FALSE)
+test = read.csv("new_test.csv",header=TRUE,na.strings = c(""," ","?","NA",NA),stringsAsFactors = FALSE)
+valid = read.csv("test.csv",header=TRUE,na.strings = c(""," ","?","NA",NA),stringsAsFactors = FALSE)
+
+```
+
+
+## Data Summary
+
+```{r}
+dim(train); str (train); #View(train)
+dim(test); str (test); #View(test)
+```
+
+
+## Change attributes to respective types
+
+```{r}
+
+## Check the String attributes from the data description
+## The unique values are a lot
+
+# NameOfTheVehicle : Firstly i tried to do string replacement and substitution to extract car name, but failed to do so, hence decided to not include this column
+# ModelOfTheVehicle : change to factors, and later combine those levels where frequency is less than 3%
+
+length(unique(train$NameOfTheVehicle))
+length(unique(train$ModelOfTheVehicle))
+
+### Bind together the data
+
+names(train)
+
+data = rbind(train,valid)
+test$Price = 0
+data = rbind(data,test)
+
+# Categorical and Numeric Attributes
+factCols = c("SellerType","OfferType","VehicleType","GearBoxType","MonthOfVehicleRegistration","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired")
+numCols = c("Price","YearOfVehicleRegistration","PowerOfTheEngine","ZipCode")
+dateCols = c("DataCollectedDate","DateOfAdCreation","DateOfAdLastSeen")
+
+
+## change data to respective types
+
+## Categorical
+
+data[,factCols] <- data.frame(apply(data[,names(data) %in% factCols],MARGIN = 2,FUN = function(x) as.factor(as.character(x))))
+
+## Numeric
+
+data[,numCols] <- data.frame(apply(data[,names(data) %in% numCols],MARGIN = 2,FUN = function(x) as.numeric(x)))
+
+## Datecols
+
+#For DataCollectedDate, DateOfAdCreation and DateOfAdLastSeen, Since the data are not spread much, i will not take these into account for model building
+
+# data$DataCollectedDate = as.Date.character(data$DataCollectedDate,'%d-%m-%Y')
+# data$DataCollectedDate = as.factor(format(data$DataCollectedDate,'%m'))
+# 
+# data$DateOfAdCreation = as.Date.character(data$DateOfAdCreation,'%d-%m-%Y')
+# data$DateOfAdCreation = as.factor(format(data$DateOfAdCreation,'%Y'))
+# 
+# data$DateOfAdLastSeen = as.Date.character(data$DateOfAdLastSeen,'%d-%m-%Y')
+# data$DateOfAdLastSeen = as.factor(format(data$DateOfAdLastSeen,'%m'))
+
+data$DataCollectedDate = NULL
+data$DateOfAdCreation = NULL
+data$DateOfAdLastSeen = NULL
+
+#train$VehicleName = gsub("[0-9]|\\*+|%+|#+|!+|???+|\\.+|\\\\+|/+|\\?+|>+|\\++|~+","", #train$NameOfTheVehicle)
+#train$VehicleName = gsub("_+","_", train$VehicleName)
+#train$VehicleName = gsub("^_","", train$VehicleName)
+
+#table(train$VehicleName)
+
+
+
+data$NameOfTheVehicle = NULL
+
+
+data$ModelOfTheVehicle = as.factor(as.character(data$ModelOfTheVehicle))
+
+
+
+## Removing other columns which dont add any meaning
+length(unique(train$VehicleID))
+
+data$VehicleID = NULL
+data$ZipCode = NULL
+data$SellerType = NULL
+data$OfferType = NULL
+
+## Check for Near Zero Variance
+
+nzv <- nearZeroVar(data) #NumberOfPictures, remove this column also
+data$NumberOfPictures = NULL
+
+str(data)
+
+## Separate numerical and categorical data for further analysis
+
+factCols = c("VehicleType","GearBoxType","MonthOfVehicleRegistration","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired","ModelOfTheVehicle","DataCollectedDate","DateOfAdCreation","DateOfAdLastSeen")
+numCols = c("Price","YearOfVehicleRegistration","PowerOfTheEngine","DistranceTravelled")
+
+#factCols = c(2,4,6,8:11)
+#numCols = c(1,3,5,7)
+
+
+num_data = data[,names(data) %in% numCols]
+cat_data = data[,names(data) %in% factCols]
+
+str(num_data)
+str(cat_data)
+
+
+
+```
+
+## Plotting the data
+
+```{r}
+
+
+#Plotting the String attributes
+barchart(data$ModelOfTheVehicle)
+#barchart(train$NameOfTheVehicle)
+
+
+```
+
+
+## Plots of numerical attributes vs Target Attribute
+```{r}
+
+## Most of the Engine Powers associated with higher power doesnt have hightest price
+
+boxplot(data$PowerOfTheEngine) ## Too many outliers in this attribute, this will be dealt with later
+
+ggplot(data=data)+
+  geom_point(aes(x = PowerOfTheEngine, y=Price)) + 
+  scale_y_continuous("Price of car", breaks = seq(0,100000,1000))
+
+
+```
+
+
+```{r}
+
+## Price is distributed proportionally across all distance travelled values, my assumption that price would be less with distance travelled is not correct
+
+ggplot(data=data)+
+  geom_point(aes(x = DistranceTravelled, y=Price)) + 
+  scale_y_continuous("Price of car", breaks = seq(0,100000,1000))
+```
+
+```{r}
+
+## The older year of registration, have lesser prices
+
+ggplot(data=data)+
+  geom_point(aes(x = YearOfVehicleRegistration, y=Price)) + 
+  scale_y_continuous("Price of car", breaks = seq(0,100000,1000))
+```
+
+
+```{r}
+
+
+ggplot(data=data) +
+  geom_point(mapping=aes(x = Price, y = PowerOfTheEngine, color = IsDamageRepaired))
+
+```
+
+# Data Cleaning
+
+## Numeric Variables
+
+```{r}
+# Missing numeric variables
+
+
+sum(is.na(num_data))
+
+# Correlations
+
+numCorr <- findCorrelation(cor(num_data), cutoff = .80)
+#num_train <- num_train[,-numCorr] 
+#num_test <- num_test[,-numCorr]
+
+
+```
+
+## Categorical variables
+
+```{r}
+# sum(is.na(cat_train))
+# sum(is.na(cat_test))
+# sum(is.na(cat_valid))
+
+sum(is.na(cat_data))
+
+## percentage of missing values per column
+
+
+missing.cat.data = sapply(cat_data, function(x) {(sum(is.na(x))/length(x))*100})
+
+## For remaining missing values, label as "unavailable"
+
+#Convert to character
+
+cat_data <- data.frame(apply(cat_data,MARGIN = 2,FUN = function(x) as.character(x)))
+
+#Set missing value to Unavailable, i = row, j = col
+
+
+for (i in seq_along(cat_data)) set(cat_data, i=which(is.na(cat_data[[i]])), j=i, value="Unavailable")
+
+#Convert back to factors
+
+cat_data <- data.frame(apply(cat_data,MARGIN = 2,FUN = function(x) as.factor(as.character(x))))
+
+```
+
+# Data Manipulation
+* Combine categorical variables which have several levels with low frequencies.
+```{r}
+#combine factor levels with less than 3% values
+
+for(i in names(cat_data)){
+                  p <- 3/100
+                  ld <- names(which(prop.table(table(cat_data[[i]])) < p))
+                  levels(cat_data[[i]])[levels(cat_data[[i]]) %in% ld] <- "Other"
+}
+
+
+
+# Hygiene check
+#check columns with unequal levels (library mlr)
+
+summarizeColumns(cat_data)[,"nlevs"]
+
+str(cat_data)
+```
+
+
+# Machine Learning
+
+## Create the data
+```{r}
+
+# Standardize the data
+
+preProc<-preProcess(num_data[,-1],method = c("center", "scale"))
+num_data[,-1] <- predict(preProc,num_data[,-1])
+
+
+#combine num and cat data
+
+data_combi = cbind(num_data,cat_data)
+
+# Retrieve the Test data back
+
+d_test = data_combi[78467:90438,]
+
+# Remove the test data from combined data
+
+data_combi = data_combi[-c(78467:90438),]
+
+#Split into train and valid
+
+library(caTools)
+
+set.seed(1000)
+split = sample.split(data_combi$Price, SplitRatio = 0.70)
+
+d_train = subset(data_combi, split==TRUE)
+
+d_valid = subset(data_combi, split==FALSE)
+
+
+
+
+
+```
+
+
+## Trying different Algorithms
+
+### Preparing the data in required format
+
+```{r}
+
+
+target_train = d_train$Price
+target_valid = d_valid$Price
+
+d_train <- as.data.frame(model.matrix(Price~.-1,data=d_train))
+d_test <- as.data.frame(model.matrix(Price~.-1,data=d_test))
+d_valid <- as.data.frame(model.matrix(Price~.-1,data=d_valid))
+
+# Blank space in names of columns was throwing error, while running RF, so changed blank to underscore
+names(d_train) = gsub(" ","_",names(d_train))
+names(d_test) = gsub(" ","_",names(d_test))
+names(d_valid) = gsub(" ","_",names(d_valid))
+
+# Assigning back the Target variable
+d_train$Price = target_train
+d_test$Price = 0
+d_valid$Price = target_valid
+
+str(d_train)
+
+
+```
+
+### Model1 : Linear Regression (For getting basic understanding) and benchmarking
+
+```{r}
+
+set.seed(26)
+fit.linear1 = lm(Price~.,data=d_train)
+summary(fit.linear1)
+
+#Adjusted R-squared:  0.6582
+
+plot(fit.linear1)
+
+## The assumptions of linearity are not held true, there is heteroscedasticity, influentual observations, and funnel shaped pattern
+
+## Update the model based on cooks distance and studentized residual
+
+w <- abs(rstudent(fit.linear1)) < 3 & abs(cooks.distance(fit.linear1)) < 4/nrow(fit.linear1$model)
+
+fit.linear2 <- update(fit.linear1, weights=as.numeric(w))
+
+summary(fit.linear2)
+
+plot(fit.linear2)
+
+## Metrics on updated model
+
+## Error on train data
+
+regr.eval(fit.linear2$fitted.values,d_train$Price) 
+
+## Error on Valid dat
+
+fit.linear.validpred = predict(fit.linear2,d_valid)
+regr.eval(fit.linear.validpred,d_valid$Price) 
+
+## Test data predictions
+
+fit.linear.testpred = predict(fit.linear2,d_test)
+
+submissions = data.frame("VehicleID" = test$VehicleID,"Price" = fit.linear.testpred)
+write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+
+
+```
+
+
+## Build another models on untransformed data
+
+### Model2 : CART for regression
+
+```{r}
+
+
+## From the complexity table, tune the cp parameter, and prune the tree
+fit.CART <- rpart(Price ~ ., d_train,control = rpart.control(cp = 0.0018))
+
+printcp(fit.CART)
+
+plotcp(fit.CART)
+
+plot(fit.CART);text(fit.CART)
+
+summary(fit.CART)
+
+## On Train Data
+
+cart.train.pred = predict(fit.CART,d_train)
+
+regr.eval(d_train$Price,cart.train.pred)
+
+## On Valid Data
+
+cart.valid.pred = predict(fit.CART,d_valid)
+
+regr.eval(d_valid$Price,cart.valid.pred)
+
+## Test data predictions
+
+cart.test.pred = predict(fit.CART,d_test)
+
+submissions = data.frame("VehicleID" = test$VehicleID,"Price" = cart.test.pred)
+write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+
+```
+
+### Model 3 : Random Forest
+
+```{r}
+
+
+fit.rf = randomForest(Price ~ ., data=d_train, keep.forest=TRUE, ntree=50, mtry = 30) 
+
+plot(fit.rf)
+
+## On Train Data
+
+rf.train.pred = predict(fit.rf,d_train)
+
+regr.eval(d_train$Price,rf.train.pred)
+
+## On Valid Data
+
+rf.valid.pred = predict(fit.rf,d_valid)
+
+regr.eval(d_valid$Price,rf.valid.pred)
+
+## Test data predictions
+
+rf.test.pred = predict(fit.rf,d_test)
+
+submissions = data.frame("VehicleID" = test$VehicleID,"Price" = rf.test.pred)
+write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+
+
+
+```
+
+
+```{r}
+
+#load("Backup.Rdata")
+
+```
+
+
+### Model 4 : Xtreme Gradient Boosting
+* Tuning Parameters
+
+nrounds (# Boosting Iterations)
+max_depth (Max Tree Depth)
+eta (Shrinkage)
+gamma (Minimum Loss Reduction)
+colsample_bytree (Subsample Ratio of Columns)
+min_child_weight (Minimum Sum of Instance Weight)
+subsample (Subsample Percentage)
+
+
+
+```{r}
+
+## Building using random search
+
+ctrl <- caret::trainControl(method = "repeatedcv",
+                     number = 5,
+                     allowParallel = TRUE)
+
+fit.xgb <- caret::train(x=d_train[,-44],
+                 y=d_train$Price,
+                 method="xgbTree",
+                 metric="MAPE",
+                 trControl=ctrl,
+                 tuneGrid=NULL,
+                search = "random")
+
+
+fit.xgb$bestTune
+plot(fit.xgb)
+summary(fit.xgb)
+
+xgbImp <- varImp(fit.xgb, scale = FALSE)
+plot(xgbImp)
+
+## On Train Data
+
+xgb.train.pred = predict(fit.xgb,d_train)
+
+regr.eval(d_train$Price,xgb.train.pred)
+
+## On Valid Data
+
+xgb.valid.pred = predict(fit.xgb,d_valid)
+
+regr.eval(d_valid$Price,xgb.valid.pred)
+
+## Test data predictions
+
+xgb.test.pred = predict(fit.xgb,d_test)
+
+submissions = data.frame("VehicleID" = test$VehicleID,"Price" = xgb.test.pred)
+write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+
+
+
+```
+
+
+```{r}
+
+## Building XGtree using manual search
+
+
+xgb.grid <- expand.grid(nrounds = c(200,400,500), #the maximum number of iterations
+                        eta = c(0.03,0.07), # shrinkage
+                        max_depth = c(5),
+                        subsample = 0.8,
+                        gamma = c(5),               #default=0
+                        colsample_bytree = 0.8,    #default=1
+                        min_child_weight = 1)     #default=1)
+
+fit.xgb1 <- caret::train(x=d_train[,-44],
+                 y=d_train$Price,
+                 method="xgbTree",
+                 metric="RMSE",
+                 trControl=ctrl,
+                 tuneGrid=xgb.grid)
+
+fit.xgb1$bestTune
+plot(fit.xgb1)
+
+xgbImp1 <- varImp(fit.xgb1, scale = FALSE)
+plot(xgbImp1)
+
+## On Train Data
+
+xgb1.train.pred = predict(fit.xgb1,d_train)
+
+regr.eval(d_train$Price,xgb1.train.pred)
+
+## On Valid Data
+
+xgb1.valid.pred = predict(fit.xgb1,d_valid)
+
+regr.eval(d_valid$Price,xgb1.valid.pred)
+
+## Test data predictions
+
+xgb1.test.pred = predict(fit.xgb1,d_test)
+
+submissions = data.frame("VehicleID" = test$VehicleID,"Price" = xgb1.test.pred)
+write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+                
+```
+
+
+#Save the environment
+```{r}
+save(list = c("d_test","d_train","d_valid","test","cart.test.pred","cart.train.pred","cart.valid.pred","rf.test.pred","rf.train.pred","rf.valid.pred","fit.xgb","xgb.train.pred","xgb.valid.pred","xgb.test.pred","fit.xgb1","xgb1.train.pred","xgb1.valid.pred","xgb1.test.pred"), file = "Backup.RData", envir = .GlobalEnv)
+```
+
+# Build Ensemble model using STACKING
+
+## Create the data frame using predicitons from our previous models
+
+```{r}
+
+load("Backup.RData")
+
+train_Pred_All_Models = data.frame(RF = rf.train.pred,
+                                   XGBTREE = xgb1.train.pred,
+                                   CART = cart.train.pred)
+
+train_Pred_All_Models$Price = d_train$Price
+
+valid_Pred_All_Models = data.frame(RF = rf.valid.pred,
+                                   XGBTREE = xgb1.valid.pred,
+                                   CART = cart.valid.pred)
+
+valid_Pred_All_Models$Price = d_valid$Price
+
+test_Pred_All_Models = data.frame(RF = rf.test.pred,
+                                   XGBTREE = xgb1.test.pred,
+                                  CART = cart.test.pred)
+
+test_Pred_All_Models$Price = d_test$Price ## Zero Values only
+
+```
+
+## Ensemble model with CART as meta learner
+```{r}
+
+fit.CART.ensemble <- rpart(Price ~ ., train_Pred_All_Models,control = rpart.control(cp = 0.002))
+
+printcp(fit.CART.ensemble)
+
+plotcp(fit.CART.ensemble)
+
+summary(fit.CART.ensemble)
+## On Train Data
+
+CART.ensemble.train.pred = predict(fit.CART.ensemble,train_Pred_All_Models)
+
+regr.eval(train_Pred_All_Models$Price,CART.ensemble.train.pred)
+
+## On Valid Data
+
+CART.ensemble.valid.pred = predict(fit.CART.ensemble,valid_Pred_All_Models)
+
+regr.eval(valid_Pred_All_Models$Price,CART.ensemble.valid.pred)
+
+## Test data predictions
+
+CART.ensemble.test.pred = predict(fit.CART.ensemble,test_Pred_All_Models)
+
+submissions = data.frame("VehicleID" = test$VehicleID,"Price" = CART.ensemble.test.pred)
+write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+
+
+
+```
+
+## Ensemble model with Linear Regression as meta learner
+
+```{r}
+
+cor(train_Pred_All_Models)
+head(train_Pred_All_Models)
+
+fit.lm.ensemble = lm(Price ~ ., data=train_Pred_All_Models) 
+summary(fit.lm.ensemble)
+plot(fit.lm.ensemble)
+
+
+## On Train Data
+
+lm.ensemble.train.pred = predict(fit.lm.ensemble,train_Pred_All_Models)
+
+regr.eval(train_Pred_All_Models$Price,lm.ensemble.train.pred)
+
+## On Valid Data
+
+lm.ensemble.valid.pred = predict(fit.lm.ensemble,valid_Pred_All_Models)
+
+regr.eval(valid_Pred_All_Models$Price,lm.ensemble.valid.pred)
+
+## Test data predictions
+
+lm.ensemble.test.pred = predict(fit.lm.ensemble,test_Pred_All_Models)
+
+submissions = data.frame("VehicleID" = test$VehicleID,"Price" = lm.ensemble.test.pred)
+write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+
+```
+
+## Fit using RF as meta learner
+
+```{r}
+
+
+fit.rf.ensemble = randomForest(Price ~ ., data=train_Pred_All_Models,keep.forest=TRUE, ntree=3) 
+# Print and understand the model
+print(fit.rf.ensemble)
+
+plot(fit.rf.ensemble)
+
+# Important attributes
+fit.rf.ensemble$importance  
+round(importance(fit.rf.ensemble), 2)
+
+
+## On Train Data
+
+rf.ensemble.train.pred = predict(fit.rf.ensemble,train_Pred_All_Models)
+
+regr.eval(train_Pred_All_Models$Price,rf.ensemble.train.pred)
+
+## On Valid Data
+
+rf.ensemble.valid.pred = predict(fit.rf.ensemble,valid_Pred_All_Models)
+
+regr.eval(valid_Pred_All_Models$Price,rf.ensemble.valid.pred)
+
+## Test data predictions
+
+rf.ensemble.test.pred = predict(fit.rf.ensemble,test_Pred_All_Models)
+
+submissions = data.frame("VehicleID" = test$VehicleID,"Price" = rf.ensemble.test.pred)
+write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+
+```
+

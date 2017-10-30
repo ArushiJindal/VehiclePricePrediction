@@ -1,0 +1,21 @@
+Attribute Name,Desscription
+VehicleID,ID
+DataCollectedDate,The date on which data collected
+NameOfTheVehicle,Name of the vehicle
+SellerType,Type of seller
+OfferType,Type of Offer 
+Price,Price value
+VehicleType,Type of vehicle
+YearOfVehicleRegistration,The year in which the vehicle was first registered
+GearBoxType,The type of transmission
+PowerOfTheEngine,The power of engine of the vehicle
+ModelOfTheVehicle,The model of the vehicle
+DistranceTravelled,Number of kilometers the vehicle moved
+MonthOfVehicleRegistration,The month in which the vehicle was first registered
+TypeOfTheFuelUsed,The type of the fuel used for the vehicle
+BrandOfTheVehicle,The brand of the vehicle
+IsDamageRepaired,"If the vehicle has a damage, whether it is repaired yet or not"
+DateOfAdCreation,The date the ad was created 
+NumberOfPictures,The numebr of pictures in the ad about the vehicle
+ZipCode,Zip code
+DateOfAdLastSeen,Th date on which the ad was seen before sale
