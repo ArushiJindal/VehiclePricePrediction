@@ -39,8 +39,8 @@ library(e1071)
 setwd("D:/INSOFE/Module 3 - ML/MITH")
 
 train = read.csv("train.csv",header=TRUE,na.strings = c(""," ","?","NA",NA),stringsAsFactors = FALSE)
-test = read.csv("new_test.csv",header=TRUE,na.strings = c(""," ","?","NA",NA),stringsAsFactors = FALSE)
-valid = read.csv("test.csv",header=TRUE,na.strings = c(""," ","?","NA",NA),stringsAsFactors = FALSE)
+test = read.csv("test.csv",header=TRUE,na.strings = c(""," ","?","NA",NA),stringsAsFactors = FALSE)
+valid = read.csv("valid.csv",header=TRUE,na.strings = c(""," ","?","NA",NA),stringsAsFactors = FALSE)
 
 ```
 
@@ -116,8 +116,6 @@ data$DateOfAdLastSeen = NULL
 
 
 data$NameOfTheVehicle = NULL
-
-
 data$ModelOfTheVehicle = as.factor(as.character(data$ModelOfTheVehicle))
 
 
@@ -131,7 +129,6 @@ data$SellerType = NULL
 data$OfferType = NULL
 
 ## Check for Near Zero Variance
-
 nzv <- nearZeroVar(data) #NumberOfPictures, remove this column also
 data$NumberOfPictures = NULL
 
@@ -160,10 +157,11 @@ str(cat_data)
 
 ```{r}
 
+## It will be worthwhile to combine the levels which have very less frequency
 
 #Plotting the String attributes
 barchart(data$ModelOfTheVehicle)
-#barchart(train$NameOfTheVehicle)
+
 
 
 ```
@@ -174,7 +172,7 @@ barchart(data$ModelOfTheVehicle)
 
 ## Most of the Engine Powers associated with higher power doesnt have hightest price
 
-boxplot(data$PowerOfTheEngine) ## Too many outliers in this attribute, this will be dealt with later
+boxplot(data$PowerOfTheEngine) ## Too many outliers in this attribute, removing these outliers did not do siginificant improvement to model as I used Tree based models, and they are resistant to outliers.
 
 ggplot(data=data)+
   geom_point(aes(x = PowerOfTheEngine, y=Price)) + 
@@ -205,6 +203,7 @@ ggplot(data=data)+
 
 ```{r}
 
+## Even though "Yes" are less, still decided not to drop this attribute
 
 ggplot(data=data) +
   geom_point(mapping=aes(x = Price, y = PowerOfTheEngine, color = IsDamageRepaired))
@@ -223,7 +222,7 @@ sum(is.na(num_data))
 
 # Correlations
 
-numCorr <- findCorrelation(cor(num_data), cutoff = .80)
+numCorr <- findCorrelation(cor(num_data), cutoff = .80) # None found
 #num_train <- num_train[,-numCorr] 
 #num_test <- num_test[,-numCorr]
 
@@ -471,13 +470,6 @@ write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
 ```
 
 
-```{r}
-
-#load("Backup.Rdata")
-
-```
-
-
 ### Model 4 : Xtreme Gradient Boosting
 * Tuning Parameters
 
@@ -589,8 +581,17 @@ write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
 
 #Save the environment
 ```{r}
-save(list = c("d_test","d_train","d_valid","test","cart.test.pred","cart.train.pred","cart.valid.pred","rf.test.pred","rf.train.pred","rf.valid.pred","fit.xgb","xgb.train.pred","xgb.valid.pred","xgb.test.pred","fit.xgb1","xgb1.train.pred","xgb1.valid.pred","xgb1.test.pred"), file = "Backup.RData", envir = .GlobalEnv)
+#save(list = c("d_test","d_train","d_valid","test","cart.test.pred","cart.train.pred","cart.valid.pred","rf.test.pred","rf.train.pred","rf.valid.pred","fit.xgb","xgb.train.pred","xgb.valid.pred","xgb.test.pred","fit.xgb1","xgb1.train.pred","xgb1.valid.pred","xgb1.test.pred"), file = "Backup.RData", envir = .GlobalEnv)
 ```
+
+
+
+```{r}
+
+#load("Backup.Rdata") #Uncomment  this line and load the environement, it saves the required data, models and predictions of all models built so far, and you can conveniently run the code down
+
+```
+
 
 # Build Ensemble model using STACKING
 
