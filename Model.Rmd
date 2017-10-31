@@ -55,32 +55,55 @@ dim(test); str (test); #View(test)
 
 ## Change attributes to respective types
 
+### Bind the data together in a single data frame
+
 ```{r}
 
-## Check the String attributes from the data description
-## The unique values are a lot
-
-# NameOfTheVehicle : Firstly i tried to do string replacement and substitution to extract car name, but failed to do so, hence decided to not include this column
-# ModelOfTheVehicle : change to factors, and later combine those levels where frequency is less than 3%
-
-length(unique(train$NameOfTheVehicle))
-length(unique(train$ModelOfTheVehicle))
-
 ### Bind together the data
-
-names(train)
 
 data = rbind(train,valid)
 test$Price = 0
 data = rbind(data,test)
 
-# Categorical and Numeric Attributes
+names(data)
+```
+
+### Check the String attributes from the data description
+
+```{r}
+# NameOfTheVehicle : Firstly i tried to do string replacement and substitution to extract car name, but failed to do so, hence decided to not include this column
+# ModelOfTheVehicle : change to factors, and later combine those levels where frequency is less than 3%
+
+length(unique(data$NameOfTheVehicle))
+length(unique(data$ModelOfTheVehicle))
+data$VehicleName = gsub("[0-9]|\\*+|%+|#+|!+|\\.+|\\\\+|/+|\\?+|>+|\\++|~+","", data$NameOfTheVehicle)
+data$VehicleName = gsub("_+","_", data$VehicleName)
+data$VehicleName = gsub("^_","", data$VehicleName)
+
+car = c("audi","mercedes","ford","cabrio","cdi","mazda","klasse","daimler","limousine","limusine","bmw","bwm","renault","clio","carisma","biete","berlingo", "sportback", "sport","caddy","chevrolet","auto","alfa","astra", "chrysler","citroën","citroeen","dacia","citroen","paket","duster","daihatsu","xenon","corsa","daewo","fiat","gepflegter","golf","fiesta","erhaltenen","civic", "accord","guenstig","honda","hyundai","guter","jaguar", "volvo", "cherokee" , "kia", "jahren","klima","Kleiner","lada","laguna","lancia","rover","lupo","nissan","skoda","volkswagen","peugeot","subaru","opel","mitsubishi","toyota","porsche","ibiza","suzuki","nissan","cooper","touran","polo","wrangler","highline","tiguan","leon","passat")
+
+for(i in car){
+  data$VehicleName = ifelse(grepl(i,tolower(data$VehicleName) ),i,data$VehicleName)
+}
+
+
+
+prop.table(table(data$VehicleName))
+
+unique(data$VehicleName)
+str(data$VehicleName)
+data$NameOfTheVehicle = NULL
+data$ModelOfTheVehicle = as.factor(as.character(data$ModelOfTheVehicle))
+data$VehicleName = as.factor(as.character(data$VehicleName))
+```
+
+### Categorical and Numeric Attributes
+
+```{r}
+
 factCols = c("SellerType","OfferType","VehicleType","GearBoxType","MonthOfVehicleRegistration","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired")
 numCols = c("Price","YearOfVehicleRegistration","PowerOfTheEngine","ZipCode")
 dateCols = c("DataCollectedDate","DateOfAdCreation","DateOfAdLastSeen")
-
-
-## change data to respective types
 
 ## Categorical
 
@@ -90,16 +113,21 @@ data[,factCols] <- data.frame(apply(data[,names(data) %in% factCols],MARGIN = 2,
 
 data[,numCols] <- data.frame(apply(data[,names(data) %in% numCols],MARGIN = 2,FUN = function(x) as.numeric(x)))
 
+```
+
+### The date attributes
+
+```{r}
 ## Datecols
 
 #For DataCollectedDate, DateOfAdCreation and DateOfAdLastSeen, Since the data are not spread much, i will not take these into account for model building
 
 # data$DataCollectedDate = as.Date.character(data$DataCollectedDate,'%d-%m-%Y')
 # data$DataCollectedDate = as.factor(format(data$DataCollectedDate,'%m'))
-# 
+ 
 # data$DateOfAdCreation = as.Date.character(data$DateOfAdCreation,'%d-%m-%Y')
 # data$DateOfAdCreation = as.factor(format(data$DateOfAdCreation,'%Y'))
-# 
+ 
 # data$DateOfAdLastSeen = as.Date.character(data$DateOfAdLastSeen,'%d-%m-%Y')
 # data$DateOfAdLastSeen = as.factor(format(data$DateOfAdLastSeen,'%m'))
 
@@ -107,20 +135,12 @@ data$DataCollectedDate = NULL
 data$DateOfAdCreation = NULL
 data$DateOfAdLastSeen = NULL
 
-#train$VehicleName = gsub("[0-9]|\\*+|%+|#+|!+|???+|\\.+|\\\\+|/+|\\?+|>+|\\++|~+","", #train$NameOfTheVehicle)
-#train$VehicleName = gsub("_+","_", train$VehicleName)
-#train$VehicleName = gsub("^_","", train$VehicleName)
+```
 
-#table(train$VehicleName)
+### Removing other columns which dont add any meaning
 
+```{r}
 
-
-data$NameOfTheVehicle = NULL
-data$ModelOfTheVehicle = as.factor(as.character(data$ModelOfTheVehicle))
-
-
-
-## Removing other columns which dont add any meaning
 length(unique(train$VehicleID))
 
 data$VehicleID = NULL
@@ -133,10 +153,13 @@ nzv <- nearZeroVar(data) #NumberOfPictures, remove this column also
 data$NumberOfPictures = NULL
 
 str(data)
+```
 
-## Separate numerical and categorical data for further analysis
+### Separate numerical and categorical data for further analysis
 
-factCols = c("VehicleType","GearBoxType","MonthOfVehicleRegistration","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired","ModelOfTheVehicle","DataCollectedDate","DateOfAdCreation","DateOfAdLastSeen")
+```{r}
+
+factCols = c("VehicleType","GearBoxType","MonthOfVehicleRegistration","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired","ModelOfTheVehicle","DataCollectedDate","DateOfAdCreation","DateOfAdLastSeen","VehicleName")
 numCols = c("Price","YearOfVehicleRegistration","PowerOfTheEngine","DistranceTravelled")
 
 #factCols = c(2,4,6,8:11)
@@ -148,12 +171,23 @@ cat_data = data[,names(data) %in% factCols]
 
 str(num_data)
 str(cat_data)
+```
 
+## Plotting the data
+
+```{r}
+
+
+ggplot(data, aes(x=VehicleName, y=Price)) + stat_summary(fun.y="mean", geom="bar")
+
+VehicleName.price = data.frame(aggregate(Price ~ VehicleName,data = data, FUN = mean ))
+
+VehicleName.price[-order(VehicleName.price$Price),]
 
 
 ```
 
-## Plotting the data
+
 
 ```{r}
 
@@ -165,7 +199,6 @@ barchart(data$ModelOfTheVehicle)
 
 
 ```
-
 
 ## Plots of numerical attributes vs Target Attribute
 ```{r}
@@ -206,7 +239,7 @@ ggplot(data=data)+
 ## Even though "Yes" are less, still decided not to drop this attribute
 
 ggplot(data=data) +
-  geom_point(mapping=aes(x = Price, y = PowerOfTheEngine, color = IsDamageRepaired))
+  geom_point(mapping=aes(x = Price, y = PowerOfTheEngine, color = VehicleName))
 
 ```
 
@@ -442,9 +475,10 @@ write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
 ```{r}
 
 
-fit.rf = randomForest(Price ~ ., data=d_train, keep.forest=TRUE, ntree=50, mtry = 30) 
+fit.rf = randomForest(Price ~ ., data=d_train, keep.forest=TRUE, ntree=70, mtry = 40)
 
 plot(fit.rf)
+summary(fit.rf)
 
 ## On Train Data
 
