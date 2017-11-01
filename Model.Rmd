@@ -503,7 +503,7 @@ plotcp(fit.CART)
 
 plot(fit.CART);text(fit.CART)
 
-summary(fit.CART)
+#summary(fit.CART)
 
 ## On Train Data
 
@@ -697,15 +697,15 @@ if(file.exists(fileName)) {
 
 fit.CART.ensemble <- rpart(Price ~ ., train_Pred_All_Models,control = rpart.control(cp = 0.012))
 
-printcp(fit.CART.ensemble)
+#printcp(fit.CART.ensemble)
 
-plotcp(fit.CART.ensemble)
+#plotcp(fit.CART.ensemble)
 
 save(fit.CART.ensemble,file = fileName)
 
 }
 
-summary(fit.CART.ensemble)
+#summary(fit.CART.ensemble)
 ## On Train Data
 
 CART.ensemble.train.pred = predict(fit.CART.ensemble,train_Pred_All_Models)
