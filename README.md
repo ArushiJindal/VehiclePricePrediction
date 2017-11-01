@@ -1,5 +1,4 @@
-﻿<b> <h3> Predict the price of used vehicles based on historical data. (Refer Model Explanation and Summary.pdf for solution details) </h3> </b>
-
+﻿<b> <h3> Predict the price of used vehicles based on historical data. (Refer Model.html and Mode.RMD for code walkthrough)
 <h4>
 Used car market is huge and growing more than ever in India. Anyone who has bought or sold a used car will agree that one of the biggest challenge in the trade is estimating a fair and market smart price which would benefit both buyer and the seller. Consequently, other than individuals, automobile manufactures, used cars dealers and loan lending banks would also be interested in a model which would help them predict right price of the car.
 
@@ -20,5 +19,5 @@ Train Data | Test Data | Attribute Description | Attribute Data Types | Submissi
 
 </h5>
 
-<img src="results.png" alt="Comparison of different standalone models">
+
 
