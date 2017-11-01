@@ -88,22 +88,62 @@ for(i in car){
 
 
 
-prop.table(table(data$VehicleName))
+#prop.table(table(data$VehicleName))
 
-unique(data$VehicleName)
-str(data$VehicleName)
+#unique(data$VehicleName)
 data$NameOfTheVehicle = NULL
-data$ModelOfTheVehicle = as.factor(as.character(data$ModelOfTheVehicle))
-data$VehicleName = as.factor(as.character(data$VehicleName))
+
+
+```
+
+### The date attributes
+
+```{r}
+## Datecols
+
+#For DataCollectedDate, DateOfAdCreation and DateOfAdLastSeen, I will extract month,year and month respectively
+
+data$DataCollectedDate = as.Date.character(data$DataCollectedDate,'%d-%m-%Y')
+data$DataCollectedDate = format(data$DataCollectedDate,'%m')
+ 
+data$DateOfAdCreation = as.Date.character(data$DateOfAdCreation,'%d-%m-%Y')
+data$DateOfAdCreation = format(data$DateOfAdCreation,'%Y')
+ 
+data$DateOfAdLastSeen = as.Date.character(data$DateOfAdLastSeen,'%d-%m-%Y')
+data$DateOfAdLastSeen = format(data$DateOfAdLastSeen,'%m')
+
+#data$DataCollectedDate = NULL
+#data$DateOfAdCreation = NULL
+#data$DateOfAdLastSeen = NULL
+str(data)
+```
+
+### Removing other columns which dont add any meaning
+
+```{r}
+
+data$VehicleID = NULL
+data$ZipCode = NULL
+
+## Check for Near Zero Variance
+nzv <- nearZeroVar(data) #NumberOfPictures,SellerType,OfferType remove this column also
+data$NumberOfPictures = NULL
+data$SellerType = NULL
+data$OfferType = NULL
+
+str(data)
+
+
 ```
 
 ### Categorical and Numeric Attributes
 
 ```{r}
 
-factCols = c("SellerType","OfferType","VehicleType","GearBoxType","MonthOfVehicleRegistration","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired")
-numCols = c("Price","YearOfVehicleRegistration","PowerOfTheEngine","ZipCode")
-dateCols = c("DataCollectedDate","DateOfAdCreation","DateOfAdLastSeen")
+
+factCols = c("DataCollectedDate","VehicleType","YearOfVehicleRegistration","GearBoxType","ModelOfTheVehicle","MonthOfVehicleRegistration","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired","DateOfAdCreation","DateOfAdLastSeen","VehicleName")
+numCols = c("Price","PowerOfTheEngine","DistranceTravelled")
+
 
 ## Categorical
 
@@ -113,58 +153,14 @@ data[,factCols] <- data.frame(apply(data[,names(data) %in% factCols],MARGIN = 2,
 
 data[,numCols] <- data.frame(apply(data[,names(data) %in% numCols],MARGIN = 2,FUN = function(x) as.numeric(x)))
 
-```
-
-### The date attributes
-
-```{r}
-## Datecols
-
-#For DataCollectedDate, DateOfAdCreation and DateOfAdLastSeen, Since the data are not spread much, i will not take these into account for model building
-
-# data$DataCollectedDate = as.Date.character(data$DataCollectedDate,'%d-%m-%Y')
-# data$DataCollectedDate = as.factor(format(data$DataCollectedDate,'%m'))
- 
-# data$DateOfAdCreation = as.Date.character(data$DateOfAdCreation,'%d-%m-%Y')
-# data$DateOfAdCreation = as.factor(format(data$DateOfAdCreation,'%Y'))
- 
-# data$DateOfAdLastSeen = as.Date.character(data$DateOfAdLastSeen,'%d-%m-%Y')
-# data$DateOfAdLastSeen = as.factor(format(data$DateOfAdLastSeen,'%m'))
-
-data$DataCollectedDate = NULL
-data$DateOfAdCreation = NULL
-data$DateOfAdLastSeen = NULL
-
-```
-
-### Removing other columns which dont add any meaning
-
-```{r}
-
-length(unique(train$VehicleID))
-
-data$VehicleID = NULL
-data$ZipCode = NULL
-data$SellerType = NULL
-data$OfferType = NULL
-
-## Check for Near Zero Variance
-nzv <- nearZeroVar(data) #NumberOfPictures, remove this column also
-data$NumberOfPictures = NULL
-
 str(data)
 ```
+
+
 
 ### Separate numerical and categorical data for further analysis
 
 ```{r}
-
-factCols = c("VehicleType","GearBoxType","MonthOfVehicleRegistration","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired","ModelOfTheVehicle","DataCollectedDate","DateOfAdCreation","DateOfAdLastSeen","VehicleName")
-numCols = c("Price","YearOfVehicleRegistration","PowerOfTheEngine","DistranceTravelled")
-
-#factCols = c(2,4,6,8:11)
-#numCols = c(1,3,5,7)
-
 
 num_data = data[,names(data) %in% numCols]
 cat_data = data[,names(data) %in% factCols]
@@ -502,6 +498,29 @@ write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
 
 
 ```
+### Improve the random forest with tuning
+
+```{r}
+
+control <- trainControl(method="repeatedcv",number=5,repeats=2,allowParallel = TRUE,savePredictions = TRUE,verboseIter = TRUE)
+
+grid <-  expand.grid(mtry = 11)
+
+fit.rf1 = caret::train(Price ~ ., data=d_train, method = 'rf',  metric = "RMSE",trControl = control, tuneLength=30,tuneGrid=NULL, search = 'random')
+
+
+fit.rf1$bestTune
+summary(fit.rf1)
+plot(fit.rf1)
+
+rf1.train.pred <- predict(fit.rf1,d_train)
+rf1.valid.pred <- predict(fit.rf1,d_train)
+
+regr.eval(rf1.train.pred,d_train$Price)
+regr.eval(rf1.test.pred,d_train$Price)
+
+```
+
 
 
 ### Model 4 : Xtreme Gradient Boosting
