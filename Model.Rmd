@@ -750,6 +750,9 @@ lm.ensemble.valid.pred = predict(fit.lm.ensemble,valid_Pred_All_Models)
 
 regr.eval(valid_Pred_All_Models$Price,lm.ensemble.valid.pred)
 
+a = data.frame(original = valid_Pred_All_Models$Price, prediciton = lm.ensemble.valid.pred)
+View(a)
+
 ## Test data predictions
 
 lm.ensemble.test.pred = predict(fit.lm.ensemble,test_Pred_All_Models)
