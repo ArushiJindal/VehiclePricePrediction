@@ -102,19 +102,21 @@ data$NameOfTheVehicle = NULL
 ## Datecols
 
 #For DataCollectedDate, DateOfAdCreation and DateOfAdLastSeen, I will extract month,year and month respectively
+# 
+# data$DataCollectedDate = as.Date.character(data$DataCollectedDate,'%d-%m-%Y')
+# data$DataCollectedDate = format(data$DataCollectedDate,'%m')
+#  
+# data$DateOfAdCreation = as.Date.character(data$DateOfAdCreation,'%d-%m-%Y')
+# data$DateOfAdCreation = format(data$DateOfAdCreation,'%Y')
+#  
+# data$DateOfAdLastSeen = as.Date.character(data$DateOfAdLastSeen,'%d-%m-%Y')
+# data$DateOfAdLastSeen = format(data$DateOfAdLastSeen,'%m')
 
-data$DataCollectedDate = as.Date.character(data$DataCollectedDate,'%d-%m-%Y')
-data$DataCollectedDate = format(data$DataCollectedDate,'%m')
- 
-data$DateOfAdCreation = as.Date.character(data$DateOfAdCreation,'%d-%m-%Y')
-data$DateOfAdCreation = format(data$DateOfAdCreation,'%Y')
- 
-data$DateOfAdLastSeen = as.Date.character(data$DateOfAdLastSeen,'%d-%m-%Y')
-data$DateOfAdLastSeen = format(data$DateOfAdLastSeen,'%m')
+## Remove these columns
 
-#data$DataCollectedDate = NULL
-#data$DateOfAdCreation = NULL
-#data$DateOfAdLastSeen = NULL
+data$DataCollectedDate = NULL
+data$DateOfAdCreation = NULL
+data$DateOfAdLastSeen = NULL
 str(data)
 ```
 
@@ -125,11 +127,13 @@ str(data)
 data$VehicleID = NULL
 data$ZipCode = NULL
 
+
 ## Check for Near Zero Variance
 nzv <- nearZeroVar(data) #NumberOfPictures,SellerType,OfferType remove this column also
 data$NumberOfPictures = NULL
 data$SellerType = NULL
 data$OfferType = NULL
+data$MonthOfVehicleRegistration= NULL
 
 str(data)
 
@@ -141,7 +145,7 @@ str(data)
 ```{r}
 
 
-factCols = c("DataCollectedDate","VehicleType","YearOfVehicleRegistration","GearBoxType","ModelOfTheVehicle","MonthOfVehicleRegistration","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired","DateOfAdCreation","DateOfAdLastSeen","VehicleName")
+factCols = c("VehicleType","YearOfVehicleRegistration","GearBoxType","ModelOfTheVehicle","TypeOfTheFuelUsed","BrandOfTheVehicle","IsDamageRepaired","VehicleName")
 numCols = c("Price","PowerOfTheEngine","DistranceTravelled")
 
 
@@ -295,11 +299,10 @@ cat_data <- data.frame(apply(cat_data,MARGIN = 2,FUN = function(x) as.factor(as.
 #combine factor levels with less than 3% values
 
 for(i in names(cat_data)){
-                  p <- 3/100
+                  p <- 2/100
                   ld <- names(which(prop.table(table(cat_data[[i]])) < p))
                   levels(cat_data[[i]])[levels(cat_data[[i]]) %in% ld] <- "Other"
 }
-
 
 
 # Hygiene check
@@ -378,7 +381,6 @@ d_valid$Price = target_valid
 
 str(d_train)
 
-
 ```
 
 ### Model1 : Linear Regression (For getting basic understanding) and benchmarking
@@ -389,7 +391,7 @@ set.seed(26)
 fit.linear1 = lm(Price~.,data=d_train)
 summary(fit.linear1)
 
-#Adjusted R-squared:  0.6582
+####Adjusted R-squared:  0.68
 
 plot(fit.linear1)
 
@@ -405,39 +407,97 @@ summary(fit.linear2)
 
 plot(fit.linear2)
 
-## Metrics on updated model
+#####Adjusted R-squared:  0.7944
 
-## Error on train data
+```
 
-regr.eval(fit.linear2$fitted.values,d_train$Price) 
+## Plot the target variable to see distribution
+```{r}
 
-## Error on Valid dat
+## Distribution is right skewed
+qplot(x = Price, data = d_train)
 
-fit.linear.validpred = predict(fit.linear2,d_valid)
-regr.eval(fit.linear.validpred,d_valid$Price) 
-
-## Test data predictions
-
-fit.linear.testpred = predict(fit.linear2,d_test)
-
-submissions = data.frame("VehicleID" = test$VehicleID,"Price" = fit.linear.testpred)
-write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+## Take logarithm of Price to make it close to Gaussian distribution
+qplot(x = log(Price), data = d_train)
 
 
 ```
 
+### Linear Regression on transformed variable
 
-## Build another models on untransformed data
+```{r}
+
+d_train_t = d_train
+d_train_t$Price = log(d_train_t$Price)
+
+d_valid_t = d_valid
+d_valid_t$Price = log(d_valid_t$Price)
+
+
+fit.linear3 <- lm(Price~. , data=d_train_t)
+
+summary(fit.linear3)
+
+# Adjusted R-squared:  0.7764
+
+plot(fit.linear3)
+
+## Update the model based on cooks distance and studentized residual
+
+w1 <- abs(rstudent(fit.linear3)) < 3 & abs(cooks.distance(fit.linear3)) < 4/nrow(fit.linear3$model)
+
+fit.linear4 <- update(fit.linear3, weights=as.numeric(w1))
+
+summary(fit.linear4)
+
+plot(fit.linear4)
+
+# Adjusted R-squared:  0.8673
+
+## Metrics on updated model
+
+## Error on train data
+
+regr.eval(fit.linear4$fitted.values,d_train_t$Price) 
+
+## Error on Valid dat
+
+fit.linear.validpred = predict(fit.linear4,d_valid_t)
+regr.eval(fit.linear.validpred,d_valid_t$Price) 
+
+##### Around 0.03 on Train and Validation Set
+
+## Test data predictions
+
+fit.linear.testpred = exp(predict(fit.linear4,d_test))
+
+submissions = data.frame("VehicleID" = test$VehicleID,"Price" = fit.linear.testpred)
+write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
+
+```
+
+
+
+## Build another models on transformed data
 
 ### Model2 : CART for regression
 
 ```{r}
 
+fileName = "fit.CART.model.RData"
 
-## From the complexity table, tune the cp parameter, and prune the tree
-fit.CART <- rpart(Price ~ ., d_train,control = rpart.control(cp = 0.0018))
+if(file.exists(fileName)) {
+  
+  load(fileName)
+  
+} else {
+  
+  ## From the complexity table, tune the cp parameter, and prune the tree
+  fit.CART <- rpart(Price ~ ., d_train_t,control = rpart.control(cp = 0.0021))
+  save(fit.CART,file = fileName)
+  
+}
 
-printcp(fit.CART)
 
 plotcp(fit.CART)
 
@@ -447,19 +507,19 @@ summary(fit.CART)
 
 ## On Train Data
 
-cart.train.pred = predict(fit.CART,d_train)
+cart.train.pred = predict(fit.CART,d_train_t)
 
-regr.eval(d_train$Price,cart.train.pred)
+regr.eval(d_train_t$Price,cart.train.pred)
 
 ## On Valid Data
 
-cart.valid.pred = predict(fit.CART,d_valid)
+cart.valid.pred = predict(fit.CART,d_valid_t)
 
-regr.eval(d_valid$Price,cart.valid.pred)
+regr.eval(d_valid_t$Price,cart.valid.pred)
 
 ## Test data predictions
 
-cart.test.pred = predict(fit.CART,d_test)
+cart.test.pred = exp(predict(fit.CART,d_test))
 
 submissions = data.frame("VehicleID" = test$VehicleID,"Price" = cart.test.pred)
 write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
@@ -470,58 +530,44 @@ write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
 
 ```{r}
 
+fileName = "fit.rf.model.RData"
 
-fit.rf = randomForest(Price ~ ., data=d_train, keep.forest=TRUE, ntree=70, mtry = 40)
+if(file.exists(fileName)) {
+  
+  load(fileName)
+} else {
+  
+  fit.rf = randomForest(Price ~ ., data=d_train_t, keep.forest=TRUE, ntree=50, mtry = 40,do.trace = TRUE)
+  save(fit.rf,file = fileName)
+  
+}
 
-plot(fit.rf)
-summary(fit.rf)
-
-## On Train Data
-
-rf.train.pred = predict(fit.rf,d_train)
-
-regr.eval(d_train$Price,rf.train.pred)
-
-## On Valid Data
-
-rf.valid.pred = predict(fit.rf,d_valid)
-
-regr.eval(d_valid$Price,rf.valid.pred)
-
-## Test data predictions
-
-rf.test.pred = predict(fit.rf,d_test)
-
-submissions = data.frame("VehicleID" = test$VehicleID,"Price" = rf.test.pred)
-write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
-
-
-
-```
-### Improve the random forest with tuning
-
-```{r}
-
-control <- trainControl(method="repeatedcv",number=5,repeats=2,allowParallel = TRUE,savePredictions = TRUE,verboseIter = TRUE)
-
-grid <-  expand.grid(mtry = 11)
-
-fit.rf1 = caret::train(Price ~ ., data=d_train, method = 'rf',  metric = "RMSE",trControl = control, tuneLength=30,tuneGrid=NULL, search = 'random')
+  plot(fit.rf)
+  summary(fit.rf)
+  
+  
+  ## On Train Data
+  
+  rf.train.pred = predict(fit.rf,d_train_t)
+  
+  regr.eval(d_train_t$Price,rf.train.pred)
+  
+  ## On Valid Data
+  
+  rf.valid.pred = predict(fit.rf,d_valid_t)
+  
+  regr.eval(d_valid_t$Price,rf.valid.pred)
+  
+  ## Test data predictions
+  
+  rf.test.pred = exp(predict(fit.rf,d_test))
+  
+  submissions = data.frame("VehicleID" = test$VehicleID,"Price" = rf.test.pred)
+  write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
 
 
-fit.rf1$bestTune
-summary(fit.rf1)
-plot(fit.rf1)
-
-rf1.train.pred <- predict(fit.rf1,d_train)
-rf1.valid.pred <- predict(fit.rf1,d_train)
-
-regr.eval(rf1.train.pred,d_train$Price)
-regr.eval(rf1.test.pred,d_train$Price)
 
 ```
-
-
 
 ### Model 4 : Xtreme Gradient Boosting
 * Tuning Parameters
@@ -538,113 +584,68 @@ subsample (Subsample Percentage)
 
 ```{r}
 
+fileName = "fit.xgb.model.RData"
+
+if(file.exists(fileName)) {
+  
+  load(fileName)
+} else {
+  
+  
 ## Building using random search
 
 ctrl <- caret::trainControl(method = "repeatedcv",
                      number = 5,
                      allowParallel = TRUE)
 
-fit.xgb <- caret::train(x=d_train[,-44],
-                 y=d_train$Price,
-                 method="xgbTree",
-                 metric="MAPE",
-                 trControl=ctrl,
-                 tuneGrid=NULL,
-                search = "random")
 
+xgb.grid <- expand.grid(nrounds = c(700,500), #the maximum number of iterations
+                        eta = c(0.03,0.01), # shrinkage
+                        max_depth = c(5,7),
+                        subsample = 0.8,
+                        gamma = c(30,50),               #default=0
+                        colsample_bytree = 0.8,    #default=1
+                        min_child_weight = 1)     #default=1)
+
+fit.xgb <- caret::train(x=d_train_t[,-44],
+                 y=d_train_t$Price,
+                 method="xgbTree",
+                 metric="RMSE",
+                 trControl=ctrl,
+                 tuneGrid=xgb.grid,
+                 verbose = TRUE)
+
+save(fit.xgb,file = fileName)
+
+}
 
 fit.xgb$bestTune
 plot(fit.xgb)
-summary(fit.xgb)
 
 xgbImp <- varImp(fit.xgb, scale = FALSE)
 plot(xgbImp)
 
+
 ## On Train Data
 
-xgb.train.pred = predict(fit.xgb,d_train)
+xgb.train.pred = predict(fit.xgb,d_train_t)
 
-regr.eval(d_train$Price,xgb.train.pred)
+regr.eval(d_train_t$Price,xgb.train.pred)
 
 ## On Valid Data
 
-xgb.valid.pred = predict(fit.xgb,d_valid)
+xgb.valid.pred = predict(fit.xgb,d_valid_t)
 
-regr.eval(d_valid$Price,xgb.valid.pred)
+regr.eval(d_valid_t$Price,xgb.valid.pred)
 
 ## Test data predictions
 
-xgb.test.pred = predict(fit.xgb,d_test)
+xgb.test.pred = exp(predict(fit.xgb,d_test))
 
 submissions = data.frame("VehicleID" = test$VehicleID,"Price" = xgb.test.pred)
 write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
-
-
-
-```
-
-
-```{r}
-
-## Building XGtree using manual search
-
-
-xgb.grid <- expand.grid(nrounds = c(200,400,500), #the maximum number of iterations
-                        eta = c(0.03,0.07), # shrinkage
-                        max_depth = c(5),
-                        subsample = 0.8,
-                        gamma = c(5),               #default=0
-                        colsample_bytree = 0.8,    #default=1
-                        min_child_weight = 1)     #default=1)
-
-fit.xgb1 <- caret::train(x=d_train[,-44],
-                 y=d_train$Price,
-                 method="xgbTree",
-                 metric="RMSE",
-                 trControl=ctrl,
-                 tuneGrid=xgb.grid)
-
-fit.xgb1$bestTune
-plot(fit.xgb1)
-
-xgbImp1 <- varImp(fit.xgb1, scale = FALSE)
-plot(xgbImp1)
-
-## On Train Data
-
-xgb1.train.pred = predict(fit.xgb1,d_train)
-
-regr.eval(d_train$Price,xgb1.train.pred)
-
-## On Valid Data
-
-xgb1.valid.pred = predict(fit.xgb1,d_valid)
-
-regr.eval(d_valid$Price,xgb1.valid.pred)
-
-## Test data predictions
-
-xgb1.test.pred = predict(fit.xgb1,d_test)
-
-submissions = data.frame("VehicleID" = test$VehicleID,"Price" = xgb1.test.pred)
-write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
                 
 ```
-
-
-#Save the environment
-```{r}
-#save(list = c("d_test","d_train","d_valid","test","cart.test.pred","cart.train.pred","cart.valid.pred","rf.test.pred","rf.train.pred","rf.valid.pred","fit.xgb","xgb.train.pred","xgb.valid.pred","xgb.test.pred","fit.xgb1","xgb1.train.pred","xgb1.valid.pred","xgb1.test.pred"), file = "Backup.RData", envir = .GlobalEnv)
-```
-
-
-
-```{r}
-
-#load("Backup.Rdata") #Uncomment  this line and load the environement, it saves the required data, models and predictions of all models built so far, and you can conveniently run the code down
-
-```
-
 
 # Build Ensemble model using STACKING
 
@@ -652,36 +653,57 @@ write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
 
 ```{r}
 
-load("Backup.RData")
 
-train_Pred_All_Models = data.frame(RF = rf.train.pred,
-                                   XGBTREE = xgb1.train.pred,
-                                   CART = cart.train.pred)
+train_Pred_All_Models = data.frame(RF = exp(rf.train.pred),
+                                   XGBTREE = exp(xgb.train.pred),
+                                   CART = exp(cart.train.pred),
+                                   LM = exp(fit.linear4$fitted.values))
 
 train_Pred_All_Models$Price = d_train$Price
 
-valid_Pred_All_Models = data.frame(RF = rf.valid.pred,
-                                   XGBTREE = xgb1.valid.pred,
-                                   CART = cart.valid.pred)
+valid_Pred_All_Models = data.frame(RF = exp(rf.valid.pred),
+                                   XGBTREE = exp(xgb.valid.pred),
+                                   CART = exp(cart.valid.pred),
+                                   LM = exp(fit.linear.validpred))
 
 valid_Pred_All_Models$Price = d_valid$Price
 
 test_Pred_All_Models = data.frame(RF = rf.test.pred,
-                                   XGBTREE = xgb1.test.pred,
-                                  CART = cart.test.pred)
+                                   XGBTREE = xgb.test.pred,
+                                  CART = cart.test.pred,
+                                  LM = fit.linear.testpred)
 
 test_Pred_All_Models$Price = d_test$Price ## Zero Values only
+head(train_Pred_All_Models)
+
+## Check Correlations :All are highly correlated, donot expect much improvemnt in models
+
+cor(train_Pred_All_Models)
+
 
 ```
 
 ## Ensemble model with CART as meta learner
 ```{r}
 
-fit.CART.ensemble <- rpart(Price ~ ., train_Pred_All_Models,control = rpart.control(cp = 0.002))
+
+fileName = "fit.CART.ensemble.model.RData"
+
+if(file.exists(fileName)) {
+  
+  load(fileName)
+} else {
+  
+
+fit.CART.ensemble <- rpart(Price ~ ., train_Pred_All_Models,control = rpart.control(cp = 0.012))
 
 printcp(fit.CART.ensemble)
 
 plotcp(fit.CART.ensemble)
+
+save(fit.CART.ensemble,file = fileName)
+
+}
 
 summary(fit.CART.ensemble)
 ## On Train Data
@@ -710,9 +732,6 @@ write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
 ## Ensemble model with Linear Regression as meta learner
 
 ```{r}
-
-cor(train_Pred_All_Models)
-head(train_Pred_All_Models)
 
 fit.lm.ensemble = lm(Price ~ ., data=train_Pred_All_Models) 
 summary(fit.lm.ensemble)
@@ -744,8 +763,20 @@ write.csv(x = submissions,file="prediction.csv",row.names = FALSE)
 
 ```{r}
 
+fileName = "fit.rf.ensemble.model.RData"
 
-fit.rf.ensemble = randomForest(Price ~ ., data=train_Pred_All_Models,keep.forest=TRUE, ntree=3) 
+if(file.exists(fileName)) {
+  
+  load(fileName)
+  
+} else {
+  
+  fit.rf.ensemble = randomForest(Price ~ ., data=train_Pred_All_Models,keep.forest=TRUE, ntree=3) 
+  save(fit.rf.ensemble,file = fileName)
+  
+}
+
+
 # Print and understand the model
 print(fit.rf.ensemble)
 
